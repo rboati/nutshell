@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# version 1.0.0
+# version 1.1.0
 #
 
 
@@ -24,29 +24,27 @@ __nutsh_log_warn() {
 
 
 __nutsh_trust() {
-	local nutsh_dir
-	nutsh_dir="$(cd "${1:-.}" &> /dev/null && pwd -P)"
-	if [ "$nutsh_dir" = "" ] || ! [ -f "$nutsh_dir/${__nutsh_rcfile}" ]; then
+	local nutsh_dir="$(cd "${1:-.}" &> /dev/null && pwd -P)"
+	if [[ -z $nutsh_dir  || ! -f "$nutsh_dir/${__nutsh_rcfile}" ]]; then
 		__nutsh_log_error "'${__nutsh_rcfile}' file not found"
-		return 1;
+		return 1
 	fi
 
 	chmod u+rw,go-w,a-x "$nutsh_dir/${__nutsh_rcfile}"
 
 	local tilde='~'
 	printf -- "nutshell: Trusting \"%s\"\n" "${nutsh_dir/#$HOME/$tilde}"
-	local found=""
-	local mtime;
-	mtime="$(__nutsh_get_mtime "$nutsh_dir/${__nutsh_rcfile}")"
+	declare -i found=0
+	local mtime="$(__nutsh_get_mtime "$nutsh_dir/${__nutsh_rcfile}")"
 	{
 		while IFS=":" read -r -d '' val key; do
-			if [ "$key" = "$nutsh_dir" ]; then
+			if [[ $key == $nutsh_dir ]]; then
 				val="$mtime"
 				found=1
 			fi
 			printf "%s:%s\0" "$val" "$key"
 		done < "${__nutsh_conf_dir}/trustdb"
-		if [ "$found" = "" ]; then
+		if (( found == 0 )); then
 			printf "%s:%s\0" "$mtime" "$nutsh_dir"
 		fi
 	} | ( umask 0077 && cat >| "${__nutsh_conf_dir}/trustdb.tmp")
@@ -56,16 +54,15 @@ __nutsh_trust() {
 
 
 __nutsh_untrust() {
-	local nutsh_dir
-	nutsh_dir="${1:-.}"
-	if [ -d "$nutsh_dir" ]; then
+	local nutsh_dir="${1:-.}"
+	if [[ -d $nutsh_dir ]]; then
 		nutsh_dir="$(cd "$nutsh_dir" && pwd -P)"
 	fi
 
 	local tilde='~'
 	printf -- "nutshell: Untrusting \"%s\"\n" "${nutsh_dir/#$HOME/$tilde}"
 	while IFS=":" read -r -d '' val key; do
-		if [ "$key" = "$nutsh_dir" ]; then
+		if [[ $key == $nutsh_dir ]]; then
 			continue
 		fi
 		printf "%s:%s\0" "$val" "$key"
@@ -78,11 +75,11 @@ __nutsh_untrust() {
 __nutsh_search() {
 	local cwd="$1"
 	while : ; do
-		if [ -f "$cwd/${__nutsh_rcfile}" ]; then
+		if [[ -f "$cwd/${__nutsh_rcfile}" ]]; then
 			echo "$cwd"
 			break
 		fi
-		[ "$cwd" = "/" ] && break
+		[[ $cwd  == "/" ]] && break
 		cwd="$(cd "$cwd/.." && pwd)"
 	done
 }
@@ -92,9 +89,9 @@ __nutsh_search_env_to_load() {
 	local cwd="$1"
 	local prev_nutsh_dir=""
 	while : ; do
-		if [ -f "$cwd/${__nutsh_rcfile}" ]; then
-			if [ "$cwd" = "$NUTSHELL_DIR" ]; then
-				if [ "$prev_nutsh_dir" = "" ]; then
+		if [[ -f "$cwd/${__nutsh_rcfile}" ]]; then
+			if [[ $cwd == $NUTSHELL_DIR ]]; then
+				if [[ -z $prev_nutsh_dir ]]; then
 					prev_nutsh_dir="$cwd"
 				fi
 				break
@@ -102,7 +99,7 @@ __nutsh_search_env_to_load() {
 			prev_nutsh_dir="$cwd"
 		fi
 
-		[ "$cwd" = "/" ] && break
+		[[ $cwd == "/" ]] && break
 		cwd="$(cd "$cwd/.." && pwd)"
 	done
 	echo "$prev_nutsh_dir"
@@ -110,19 +107,18 @@ __nutsh_search_env_to_load() {
 
 
 __nutsh_fancy_prompt_hook() {
-	local previous_exit_status=$?;
+	local previous_exit_status=$?
 	local fmt="\e[0;36m\e[7m %15s \e[27m %s\e[0m\n"
-	local full=""
 	local tilde='~'
+	local full="${NUTSHELL_DIR/#$HOME/$tilde}"
 
-	full="${NUTSHELL_DIR/#$HOME/$tilde}"
-	if [ "$full" != "" ]; then
+	if [[ -n $full ]]; then
 		# shellcheck disable=2059
 		printf -- "$fmt" NUTSHELL_DIR "$full"
 	fi
 
 	printf -- "\e[0m"
-	return $previous_exit_status;
+	return $previous_exit_status
 }
 
 
@@ -149,13 +145,12 @@ __nutsh_open_shell() {
 
 
 __nutsh_check_trustdb() {
-	if [ ! -f "${__nutsh_conf_dir}/trustdb" ]; then
+	if [[ ! -f "${__nutsh_conf_dir}/trustdb" ]]; then
 		return 1
 	fi
-	local mode
-	mode=$(__nutsh_get_mode "${__nutsh_conf_dir}/trustdb")
+	local mode=$(__nutsh_get_mode "${__nutsh_conf_dir}/trustdb")
 	# file rw only by owner
-	if [ $(( mode != 0100600 )) = 1 ]; then
+	if (( mode != 0100600 )); then
 		return 1
 	fi
 	return 0
@@ -169,7 +164,7 @@ __nutsh_find_in_trustdb() {
 	fi
 	local nutsh_dir="$1"
 	while IFS=":" read -r -d '' val key; do
-		if [ "$key" = "$nutsh_dir" ]; then
+		if [[ $key  == $nutsh_dir ]]; then
 			printf "%s" "$val"
 			return 0
 		fi
@@ -187,28 +182,24 @@ __nutsh_print_trustdb() {
 
 
 __nutsh_check() {
-	local nutsh_dir
-	nutsh_dir="${1:-"$(pwd -P)"}"
-	if ! [ -f "$nutsh_dir/${__nutsh_rcfile}" ] && [ -O "$nutsh_dir/${__nutsh_rcfile}" ]; then
+	local nutsh_dir="${1:-"$(pwd -P)"}"
+	if [[ ! -f "$nutsh_dir/${__nutsh_rcfile}" && -O "$nutsh_dir/${__nutsh_rcfile}" ]]; then
 		return 1
 	fi
 
-	local trusted_mtime
-	trusted_mtime="$(__nutsh_find_in_trustdb "$nutsh_dir")"
-	if [ "$trusted_mtime" = "" ]; then
-		return 1;
-	fi
-
-	local mtime
-	mtime=$(__nutsh_get_mtime "$nutsh_dir/${__nutsh_rcfile}")
-	if [[ $mtime != "$trusted_mtime" ]]; then
+	local trusted_mtime="$(__nutsh_find_in_trustdb "$nutsh_dir")"
+	if [[ -z $trusted_mtime ]]; then
 		return 1
 	fi
 
-	local mode
-	mode=$(__nutsh_get_mode "$nutsh_dir/${__nutsh_rcfile}")
+	local mtime=$(__nutsh_get_mtime "$nutsh_dir/${__nutsh_rcfile}")
+	if [[ $mtime != $trusted_mtime ]]; then
+		return 1
+	fi
+
+	local mode=$(__nutsh_get_mode "$nutsh_dir/${__nutsh_rcfile}")
 	# file at least readable by owner and at most readable by group and others
-	if [ $(( mode & 0777433 )) != 33024 ]; then
+	if (( ( mode & 0777433 ) != 33024 )); then
 		return 1
 	fi
 
@@ -217,7 +208,7 @@ __nutsh_check() {
 
 
 __nutsh_reload() {
-	if [ "$NUTSHELL_DIR" = "" ]; then
+	if [[ -z $NUTSHELL_DIR ]]; then
 		__nutsh_log_error "Not inside a nutshell!"
 		return 1
 	fi
@@ -230,7 +221,7 @@ __nutsh_reload() {
 __nutsh_prompt_hook() {
 	local previous_exit_status=$?
 
-	if [ "$NUTSHELL_TARGET" != "" ]; then
+	if [[ -n $NUTSHELL_TARGET ]]; then
 		local tilde='~'
 		local cwd="$PWD"
 
@@ -250,7 +241,7 @@ __nutsh_prompt_hook() {
 	fi
 
 	while : ; do
-		if [ -f "/tmp/$NUTSHELL_SESSION" ]; then
+		if [[ -f "/tmp/$NUTSHELL_SESSION" ]]; then
 			cd "$(cat "/tmp/$NUTSHELL_SESSION")" || return 1
 			rm -f "/tmp/$NUTSHELL_SESSION"
 		fi
@@ -261,8 +252,8 @@ __nutsh_prompt_hook() {
 		local nutsh_dir
 		nutsh_dir="$(__nutsh_search_env_to_load "$cwd")"
 
-		if [ "$nutsh_dir" = "" ]; then
-			if [ "${NUTSHELL_DIR}" = "" ]; then
+		if [[ -z $nutsh_dir ]]; then
+			if [[ -z ${NUTSHELL_DIR} ]]; then
 				break
 			else
 				__nutsh_exit
@@ -270,13 +261,13 @@ __nutsh_prompt_hook() {
 		else
 			# cwd is same of found env or is subdir of found env
 
-			if [ "${NUTSHELL_DIR}" = "" ]; then
+			if [[ -z ${NUTSHELL_DIR} ]]; then
 				__nutsh_open_shell "$nutsh_dir"
 
-			elif [ "${NUTSHELL_DIR}" = "$nutsh_dir" ]; then
+			elif [[ ${NUTSHELL_DIR} == $nutsh_dir ]]; then
 				break
 
-			elif [ "${nutsh_dir##${NUTSHELL_DIR}/}" != "$nutsh_dir" ]; then
+			elif [[ ${nutsh_dir##${NUTSHELL_DIR}/} != $nutsh_dir ]]; then
 				# nutsh_dir is subdir of currently loaded env
 				__nutsh_open_shell "$nutsh_dir"
 
@@ -287,13 +278,13 @@ __nutsh_prompt_hook() {
 		fi
 	done
 
-	return $previous_exit_status;
+	return $previous_exit_status
 }
 
 
 __nutsh_is_active() {
 	local prompt=";${PROMPT_COMMAND};"
-	if [ "${prompt/;__nutsh_prompt_hook;/}" != "${prompt}" ]; then
+	if [[ "${prompt/;__nutsh_prompt_hook;/}" != $prompt ]]; then
 		return 0
 	else
 		return 1
@@ -332,38 +323,36 @@ __nutsh_status() {
 
 
 __nutsh_init() {
-	local nutsh_dir
-	nutsh_dir="$PWD"
+	local nutsh_dir="$PWD"
 
-	if [ "$nutsh_dir" = "" ]; then
+	if [[ -z $nutsh_dir ]]; then
 		__nutsh_log_error "Invalid path!"
-		return 1;
+		return 1
 	fi
 
-	if [ -f "$nutsh_dir/${__nutsh_rcfile}" ]; then
+	if [[ -f "$nutsh_dir/${__nutsh_rcfile}" ]]; then
 		__nutsh_log_error "File '${__nutsh_rcfile}' already exists!"
 		return 1
 	fi
 
-	local template
-	template="$1"
+	local template="$1"
 
-	 if [ "$template" == "" ]; then
+	 if [[ -z $template ]]; then
 		template="default"
 	 fi
 
 	(
 		umask 033
-		if ! [ -d "${__nutsh_conf_dir}/templates" ]; then
+		if [[ ! -d "${__nutsh_conf_dir}/templates" ]]; then
 			mkdir -p "${__nutsh_conf_dir}/templates"
 		fi
 
-		if ! [ -f "${__nutsh_conf_dir}/templates/default" ]; then
+		if [[ ! -f "${__nutsh_conf_dir}/templates/default" ]]; then
 			printf -- "# nutshell: see https://github.com/rboati/nutshell\n"  >| "${__nutsh_conf_dir}/templates/default"
 	 	fi
 	)
 
-	if ! [ -f "${__nutsh_conf_dir}/templates/$template" ]; then
+	if [[ ! -f "${__nutsh_conf_dir}/templates/$template" ]]; then
 		__nutsh_log_error "Template \"$template\" does not exist!"
 		return 1
 	fi
@@ -375,31 +364,31 @@ __nutsh_init() {
 
 nutshell() {
 	case "$1" in
-		"init")
+		init)
 			shift; __nutsh_init "$1" ;;
-		"status")
+		status)
 			__nutsh_status ;;
-		"trust")
+		trust)
 			shift; __nutsh_trust "$1" ;;
-		"untrust")
+		untrust)
 			shift; __nutsh_untrust "$1" ;;
-		"show")
+		show)
 			__nutsh_print_trustdb ;;
-		"reload")
+		reload)
 			__nutsh_reload ;;
 		*)
-			cat << EOF
-nutshell [command]
-Available commands:
-  init [template]  Initialize current directory with a default '${__nutsh_rcfile}' file
-                   or one specified by template name
-  status           Show nutshell nesting status
-  trust [dir]      Trust current directory or "dir" if specified
-  untrust [dir]    Untrust current directory or "dir" if specified
-  show             Print trusted directories
-  reload           Trust '\$NUTSHELL_DIR/${__nutsh_rcfile}' file and reload current nutshell
-
-EOF
+			cat <<- EOF
+				nutshell [command]
+				Available commands:
+				  init [template]  Initialize current directory with a default '${__nutsh_rcfile}' file
+				                   or one specified by template name
+				  status           Show nutshell nesting status
+				  trust [dir]      Trust current directory or "dir" if specified
+				  untrust [dir]    Untrust current directory or "dir" if specified
+				  show             Print trusted directories
+				  reload           Trust '\$NUTSHELL_DIR/${__nutsh_rcfile}' file and reload current nutshell
+				
+				EOF
 			;;
 	esac
 }
@@ -410,26 +399,25 @@ nutsh() {
 
 
 __nutsh_complete() {
-	local cur_word prev_word cmd_list
-	cur_word="${COMP_WORDS[COMP_CWORD]}"
-	prev_word="${COMP_WORDS[COMP_CWORD-1]}"
-	cmd_list="init status trust untrust show reload"
-	if [[ $COMP_CWORD = 1 ]]; then
+	local cur_word="${COMP_WORDS[COMP_CWORD]}"
+	local prev_word="${COMP_WORDS[COMP_CWORD-1]}"
+	local cmd_list="init status trust untrust show reload"
+	if (( COMP_CWORD == 1 )); then
 		# shellcheck disable=2086
 		COMPREPLY=( $(compgen -W "${cmd_list}" -- ${cur_word}) )
 		return 0
 	fi
 
-	if [[ $COMP_CWORD == 2 ]]; then
+	if (( COMP_CWORD == 2 )); then
 		case "$prev_word" in
-		"init")
+		init)
 			compopt -o nospace &> /dev/null
 			for i in $(compgen -o nospace -f -- "${__nutsh_conf_dir}/templates/${cur_word}"); do
 				COMPREPLY+=( "${i##*/}" )
 			done
 			return 0
 			;;
-		"trust")
+		trust)
 			compopt -o nospace &> /dev/null
 			local IFS=$'\n'
 			for i in $(compgen -o nospace -d -- "${cur_word}"); do
@@ -437,7 +425,7 @@ __nutsh_complete() {
 			done
 			return 0
 			;;
-		"untrust")
+		untrust)
 			cur_word="$(cd "$cur_word" &> /dev/null && pwd -P || echo "$cur_word")"
 			local word_list=""
 			while IFS=":" read -r -d '' val key; do
@@ -459,35 +447,35 @@ __nutsh_complete() {
 
 __nutsh_setup() {
 	# Disabling for Midnight Commander
-	if [ "$MC_SID" ]; then
+	if [[ -n $MC_SID ]]; then
 		return 1
 	fi
 
-	if [ "$NUTSHELL_SESSION" = "" ]; then
+	if [[ -z $NUTSHELL_SESSION ]]; then
 		readonly NUTSHELL_SESSION="nutsh-$$"
 		export NUTSHELL_SESSION
 
 		# first time setup
-		if [ ! -d "${__nutsh_conf_dir}" ]; then
+		if [[ ! -d "${__nutsh_conf_dir}" ]]; then
 			mkdir -p "${__nutsh_conf_dir}"
 		fi
-		if [ ! -f "${__nutsh_conf_dir}/trustdb" ]; then
+		if [[ ! -f "${__nutsh_conf_dir}/trustdb" ]]; then
 			( umask 0077 && : >| "${__nutsh_conf_dir}/trustdb")
 		fi
 
 	fi
 
-	local err=0
+	local -i err=0
 	for arg in "$@"; do
 		case "$arg" in
-			"prompt" | "quiet") ;;
-			"help" )
-				cat << EOF
-nutshell.bash [options...]
-Available options:
-  prompt           Add an informative prompt
-  quiet            Stop printing informations
-EOF
+			prompt | quiet) ;;
+			help)
+				cat <<- EOF
+					nutshell.bash [options...]
+					Available options:
+					  prompt           Add an informative prompt
+					  quiet            Stop printing informations
+					EOF
 				return 0
 				;;
 			*)
@@ -497,20 +485,20 @@ EOF
 		esac
 	done
 
-	if [ "$err" = 1 ]; then
+	if (( err == 1 )); then
 		return 1
 	fi
 
 	for arg in "$@"; do
 		case "$arg" in
-			"prompt") PROMPT_COMMAND="__nutsh_fancy_prompt_hook;$PROMPT_COMMAND" ;;
-			"quiet") __nutsh_log_info() { :; } ;;
+			prompt) PROMPT_COMMAND="__nutsh_fancy_prompt_hook;$PROMPT_COMMAND" ;;
+			quiet) __nutsh_log_info() { :; } ;;
 		esac
 	done
 	PROMPT_COMMAND="__nutsh_prompt_hook;$PROMPT_COMMAND"
 	complete -F __nutsh_complete nutsh nutshell
 
-	if [ "$NUTSHELL_TARGET" ]; then
+	if [[ -n $NUTSHELL_TARGET ]]; then
 		local tilde="~"
 		printf -v NUTSHELL_STACK -- "%s%5i nutshell (%s)\n" "$NUTSHELL_STACK" "$$" "${NUTSHELL_TARGET/#$HOME/$tilde}"
 	else
