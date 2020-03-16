@@ -24,6 +24,7 @@ __nutsh_log_warn() {
 
 
 __nutsh_trust() {
+	# shellcheck disable=SC2155
 	local nutsh_dir="$(cd "${1:-.}" &> /dev/null && pwd -P)"
 	if [[ -z $nutsh_dir  || ! -f "$nutsh_dir/${__nutsh_rcfile}" ]]; then
 		__nutsh_log_error "'${__nutsh_rcfile}' file not found"
@@ -35,10 +36,11 @@ __nutsh_trust() {
 	local tilde='~'
 	printf -- "nutshell: Trusting \"%s\"\n" "${nutsh_dir/#$HOME/$tilde}"
 	declare -i found=0
+	# shellcheck disable=SC2155
 	local mtime="$(__nutsh_get_mtime "$nutsh_dir/${__nutsh_rcfile}")"
 	{
 		while IFS=":" read -r -d '' val key; do
-			if [[ $key == $nutsh_dir ]]; then
+			if [[ $key == "$nutsh_dir" ]]; then
 				val="$mtime"
 				found=1
 			fi
@@ -62,7 +64,7 @@ __nutsh_untrust() {
 	local tilde='~'
 	printf -- "nutshell: Untrusting \"%s\"\n" "${nutsh_dir/#$HOME/$tilde}"
 	while IFS=":" read -r -d '' val key; do
-		if [[ $key == $nutsh_dir ]]; then
+		if [[ $key == "$nutsh_dir" ]]; then
 			continue
 		fi
 		printf "%s:%s\0" "$val" "$key"
@@ -90,7 +92,7 @@ __nutsh_search_env_to_load() {
 	local prev_nutsh_dir=""
 	while : ; do
 		if [[ -f "$cwd/${__nutsh_rcfile}" ]]; then
-			if [[ $cwd == $NUTSHELL_DIR ]]; then
+			if [[ $cwd == "$NUTSHELL_DIR" ]]; then
 				if [[ -z $prev_nutsh_dir ]]; then
 					prev_nutsh_dir="$cwd"
 				fi
@@ -148,6 +150,7 @@ __nutsh_check_trustdb() {
 	if [[ ! -f "${__nutsh_conf_dir}/trustdb" ]]; then
 		return 1
 	fi
+	# shellcheck disable=SC2155
 	local mode=$(__nutsh_get_mode "${__nutsh_conf_dir}/trustdb")
 	# file rw only by owner
 	if (( mode != 0100600 )); then
@@ -164,7 +167,7 @@ __nutsh_find_in_trustdb() {
 	fi
 	local nutsh_dir="$1"
 	while IFS=":" read -r -d '' val key; do
-		if [[ $key  == $nutsh_dir ]]; then
+		if [[ $key  == "$nutsh_dir" ]]; then
 			printf "%s" "$val"
 			return 0
 		fi
@@ -186,17 +189,17 @@ __nutsh_check() {
 	if [[ ! -f "$nutsh_dir/${__nutsh_rcfile}" && -O "$nutsh_dir/${__nutsh_rcfile}" ]]; then
 		return 1
 	fi
-
+	# shellcheck disable=SC2155
 	local trusted_mtime="$(__nutsh_find_in_trustdb "$nutsh_dir")"
 	if [[ -z $trusted_mtime ]]; then
 		return 1
 	fi
-
+	# shellcheck disable=SC2155
 	local mtime=$(__nutsh_get_mtime "$nutsh_dir/${__nutsh_rcfile}")
-	if [[ $mtime != $trusted_mtime ]]; then
+	if [[ $mtime != "$trusted_mtime" ]]; then
 		return 1
 	fi
-
+	# shellcheck disable=SC2155
 	local mode=$(__nutsh_get_mode "$nutsh_dir/${__nutsh_rcfile}")
 	# file at least readable by owner and at most readable by group and others
 	if (( ( mode & 0777433 ) != 33024 )); then
@@ -264,10 +267,10 @@ __nutsh_prompt_hook() {
 			if [[ -z ${NUTSHELL_DIR} ]]; then
 				__nutsh_open_shell "$nutsh_dir"
 
-			elif [[ ${NUTSHELL_DIR} == $nutsh_dir ]]; then
+			elif [[ ${NUTSHELL_DIR} == "$nutsh_dir" ]]; then
 				break
 
-			elif [[ ${nutsh_dir##${NUTSHELL_DIR}/} != $nutsh_dir ]]; then
+			elif [[ ${nutsh_dir##${NUTSHELL_DIR}/} != "$nutsh_dir" ]]; then
 				# nutsh_dir is subdir of currently loaded env
 				__nutsh_open_shell "$nutsh_dir"
 
@@ -284,7 +287,7 @@ __nutsh_prompt_hook() {
 
 __nutsh_is_active() {
 	local prompt=";${PROMPT_COMMAND};"
-	if [[ "${prompt/;__nutsh_prompt_hook;/}" != $prompt ]]; then
+	if [[ "${prompt/;__nutsh_prompt_hook;/}" != "$prompt" ]]; then
 		return 0
 	else
 		return 1
@@ -387,7 +390,7 @@ nutshell() {
 				  untrust [dir]    Untrust current directory or "dir" if specified
 				  show             Print trusted directories
 				  reload           Trust '\$NUTSHELL_DIR/${__nutsh_rcfile}' file and reload current nutshell
-				
+
 				EOF
 			;;
 	esac
@@ -403,8 +406,7 @@ __nutsh_complete() {
 	local prev_word="${COMP_WORDS[COMP_CWORD-1]}"
 	local cmd_list="init status trust untrust show reload"
 	if (( COMP_CWORD == 1 )); then
-		# shellcheck disable=2086
-		COMPREPLY=( $(compgen -W "${cmd_list}" -- ${cur_word}) )
+		IFS=" " read -r -a COMPREPLY <<< "$(compgen -W "${cmd_list}" -- "${cur_word}")"
 		return 0
 	fi
 
